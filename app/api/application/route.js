@@ -55,49 +55,57 @@
 //     return NextResponse.json({ message: "Error sending email" }, { status: 500 });
 //   }
 // }
-
-export const runtime = "node";
-
 import nodemailer from "nodemailer";
-import { NextResponse } from "next/server";
 
-export async function POST(req: Request) {
+export async function POST(req) {
   try {
     const formData = await req.formData();
-    const fullName = formData.get("fullName")?.toString() || "";
-    const email = formData.get("email")?.toString() || "";
-    const phoneNumber = formData.get("phoneNumber")?.toString() || "";
-    const resumeBlob = formData.get("resume") as Blob | null;
 
-    // Prepare attachment safely
-    const attachments = [];
-    if (resumeBlob) {
-      const arrayBuffer = await resumeBlob.arrayBuffer();
-      attachments.push({
-        filename: (resumeBlob as any).name || "resume.pdf", // fallback name
-        content: Buffer.from(arrayBuffer),
-      });
-    }
+    const name = formData.get("name");
+    const email = formData.get("email");
+    const phone = formData.get("phone");
+    const message = formData.get("message");
+    const file = formData.get("resume");
 
+    // Read file as buffer (works on Vercel)
+    const fileBuffer = file ? Buffer.from(await file.arrayBuffer()) : null;
+
+    // Setup transporter
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS, // Gmail app password
+        pass: process.env.EMAIL_PASS,
       },
     });
 
-    await transporter.sendMail({
+    // Mail options
+    const mailOptions = {
       from: process.env.EMAIL_USER,
       to: process.env.EMAIL_TO,
-      subject: `New Job Application from ${fullName}`,
-      text: `Full Name: ${fullName}\nEmail: ${email}\nPhone: ${phoneNumber}`,
-      attachments,
-    });
+      subject: `New Application from ${name}`,
+      text: `
+Name: ${name}
+Email: ${email}
+Phone: ${phone}
+Message: ${message}
+`,
+      attachments: fileBuffer
+        ? [
+            {
+              filename: file.name,
+              content: fileBuffer,
+            },
+          ]
+        : [],
+    };
 
-    return NextResponse.json({ message: "Application sent successfully!" });
-  } catch (err) {
-    console.error("Error sending application email:", err);
-    return NextResponse.json({ message: "Error sending email" }, { status: 500 });
+    await transporter.sendMail(mailOptions);
+    return new Response(JSON.stringify({ success: true }), { status: 200 });
+  } catch (error) {
+    console.error("Error sending application email:", error);
+    return new Response(JSON.stringify({ success: false, error: error.message }), {
+      status: 500,
+    });
   }
 }
