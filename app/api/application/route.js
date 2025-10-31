@@ -56,7 +56,6 @@
 //   }
 // }
 
-
 export const runtime = "node";
 
 import nodemailer from "nodemailer";
@@ -68,16 +67,15 @@ export async function POST(req: Request) {
     const fullName = formData.get("fullName")?.toString() || "";
     const email = formData.get("email")?.toString() || "";
     const phoneNumber = formData.get("phoneNumber")?.toString() || "";
-    const resume = formData.get("resume") as File | null;
+    const resumeBlob = formData.get("resume") as Blob | null;
 
-    // Prepare attachment if exists
-    let attachments = [];
-    if (resume && resume.name) {
-      const arrayBuffer = await resume.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
+    // Prepare attachment safely
+    const attachments = [];
+    if (resumeBlob) {
+      const arrayBuffer = await resumeBlob.arrayBuffer();
       attachments.push({
-        filename: resume.name,
-        content: buffer,
+        filename: (resumeBlob as any).name || "resume.pdf", // fallback name
+        content: Buffer.from(arrayBuffer),
       });
     }
 
@@ -85,23 +83,21 @@ export async function POST(req: Request) {
       service: "gmail",
       auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS, // app password
+        pass: process.env.EMAIL_PASS, // Gmail app password
       },
     });
 
-    const mailOptions = {
+    await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: process.env.EMAIL_TO,
       subject: `New Job Application from ${fullName}`,
       text: `Full Name: ${fullName}\nEmail: ${email}\nPhone: ${phoneNumber}`,
       attachments,
-    };
+    });
 
-    await transporter.sendMail(mailOptions);
-
-    return NextResponse.json({ message: "Application sent successfully!" }, { status: 200 });
-  } catch (error) {
-    console.error("Error sending application email:", error);
+    return NextResponse.json({ message: "Application sent successfully!" });
+  } catch (err) {
+    console.error("Error sending application email:", err);
     return NextResponse.json({ message: "Error sending email" }, { status: 500 });
   }
 }
